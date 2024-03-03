@@ -5,9 +5,12 @@
 """
 import re
 from math import sin, cos, atan2, sqrt
+import numpy as np
+import pint
 
 # exceptions
 
+ureg = pint.UnitRegistry()
 
 class UnitsError(Exception):
     """Exception raised when unrecognized units are used."""
@@ -33,7 +36,7 @@ class temperature(object):
             raise UnitsError("unrecognized temperature unit: '" + units + "'")
         self._units = units.upper()
         try:
-            self._value = float(value)
+            self._value = float(value) * ureg(self._units)
         except ValueError:
             if value.startswith("M"):
                 self._value = -float(value[1:])
@@ -43,27 +46,6 @@ class temperature(object):
     def __str__(self):
         return self.string()
 
-    def value(self, units=None):
-        """Return the temperature in the specified units."""
-        if units is None:
-            return self._value
-        else:
-            if not units.upper() in temperature.legal_units:
-                raise UnitsError("unrecognized temperature unit: '" + units + "'")
-            units = units.upper()
-        if self._units == "C":
-            celsius_value = self._value
-        elif self._units == "F":
-            celsius_value = (self._value - 32.0) / 1.8
-        elif self._units == "K":
-            celsius_value = self._value - 273.15
-        if units == "C":
-            return celsius_value
-        elif units == "K":
-            return 273.15 + celsius_value
-        elif units == "F":
-            return 32.0 + celsius_value * 1.8
-
     def string(self, units=None):
         """Return a string representation of the temperature, using the given units."""
         if units is None:
@@ -72,13 +54,7 @@ class temperature(object):
             if not units.upper() in temperature.legal_units:
                 raise UnitsError("unrecognized temperature unit: '" + units + "'")
             units = units.upper()
-        val = self.value(units)
-        if units == "C":
-            return "%.1f C" % val
-        elif units == "F":
-            return "%.1f F" % val
-        elif units == "K":
-            return "%.1f K" % val
+        return f"{self._value.to(units):.1f}"
 
 
 class pressure(object):
@@ -89,32 +65,11 @@ class pressure(object):
     def __init__(self, value, units="MB"):
         if not units.upper() in pressure.legal_units:
             raise UnitsError("unrecognized pressure unit: '" + units + "'")
-        self._value = float(value)
+        self._value = float(value) * ureg(units)
         self._units = units.upper()
 
     def __str__(self):
         return self.string()
-
-    def value(self, units=None):
-        """Return the pressure in the specified units."""
-        if units is None:
-            return self._value
-        else:
-            if not units.upper() in pressure.legal_units:
-                raise UnitsError("unrecognized pressure unit: '" + units + "'")
-            units = units.upper()
-        if units == self._units:
-            return self._value
-        if self._units == "IN":
-            mb_value = self._value * 33.86398
-        else:
-            mb_value = self._value
-        if units == "MB" or units == "HPA":
-            return mb_value
-        elif units == "IN":
-            return mb_value / 33.86398
-        else:
-            raise UnitsError("unrecognized pressure unit: '" + units + "'")
 
     def string(self, units=None):
         """Return a string representation of the pressure, using the given units."""
@@ -124,13 +79,7 @@ class pressure(object):
             if units.upper() not in pressure.legal_units:
                 raise UnitsError("unrecognized pressure unit: '" + units + "'")
             units = units.upper()
-        val = self.value(units)
-        if units == "MB":
-            return "%.1f mb" % val
-        elif units == "HPA":
-            return "%.1f hPa" % val
-        elif units == "IN":
-            return "%.2f inches" % val
+        return f"{self._value.to(units):.1f}"
 
 
 class speed(object):
@@ -151,37 +100,10 @@ class speed(object):
                 "unrecognized greater-than/less-than symbol: '" + gtlt + "'"
             )
         self._gtlt = gtlt
-        self._value = float(value)
+        self._value = float(value) * ureg(self._units)
 
     def __str__(self):
         return self.string()
-
-    def value(self, units=None):
-        """Return the speed in the specified units."""
-        if not units:
-            return self._value
-        else:
-            if not units.upper() in speed.legal_units:
-                raise UnitsError("unrecognized speed unit: '" + units + "'")
-            units = units.upper()
-        if units == self._units:
-            return self._value
-        if self._units == "KMH":
-            mps_value = self._value / 3.6
-        elif self._units == "KT":
-            mps_value = self._value * 0.514444
-        elif self._units == "MPH":
-            mps_value = self._value * 0.447000
-        else:
-            mps_value = self._value
-        if units == "KMH":
-            return mps_value * 3.6
-        elif units == "KT":
-            return mps_value / 0.514444
-        elif units == "MPH":
-            return mps_value / 0.447000
-        elif units == "MPS":
-            return mps_value
 
     def string(self, units=None):
         """Return a string representation of the speed in the given units."""
@@ -191,15 +113,7 @@ class speed(object):
             if units.upper() not in speed.legal_units:
                 raise UnitsError("unrecognized speed unit: '" + units + "'")
             units = units.upper()
-        val = self.value(units)
-        if units == "KMH":
-            text = "%.0f km/h" % val
-        elif units == "KT":
-            text = "%.0f knots" % val
-        elif units == "MPH":
-            text = "%.0f mph" % val
-        elif units == "MPS":
-            text = "%.0f mps" % val
+        text = f"{self._value.to(units):.1f}"
         if self._gtlt == ">":
             text = "greater than " + text
         elif self._gtlt == "<":
@@ -236,7 +150,7 @@ class distance(object):
             )
         self._gtlt = gtlt
         try:
-            self._value = float(value)
+            self._value = float(value) * ureg(self._units)
             self._num = None
             self._den = None
         except ValueError:
@@ -249,40 +163,10 @@ class distance(object):
             self._value = float(self._num) / float(self._den)
             if df["int"]:
                 self._value += float(df["int"])
+            self._value = self._value * ureg(self._units)
 
     def __str__(self):
         return self.string()
-
-    def value(self, units=None):
-        """Return the distance in the specified units."""
-        if not units:
-            return self._value
-        else:
-            if not units.upper() in distance.legal_units:
-                raise UnitsError("unrecognized distance unit: '" + units + "'")
-            units = units.upper()
-        if units == self._units:
-            return self._value
-        if self._units == "SM" or self._units == "MI":
-            m_value = self._value * 1609.344
-        elif self._units == "FT":
-            m_value = self._value / 3.28084
-        elif self._units == "IN":
-            m_value = self._value / 39.3701
-        elif self._units == "KM":
-            m_value = self._value * 1000
-        else:
-            m_value = self._value
-        if units == "SM" or units == "MI":
-            return m_value / 1609.344
-        elif units == "FT":
-            return m_value * 3.28084
-        elif units == "IN":
-            return m_value * 39.3701
-        elif units == "KM":
-            return m_value / 1000
-        elif units == "M":
-            return m_value
 
     def string(self, units=None):
         """Return a string representation of the distance in the given units."""
@@ -292,27 +176,7 @@ class distance(object):
             if not units.upper() in distance.legal_units:
                 raise UnitsError("unrecognized distance unit: '" + units + "'")
             units = units.upper()
-        if self._num and self._den and units == self._units:
-            val = int(self._value - self._num / self._den)
-            if val:
-                text = "%d %d/%d" % (val, self._num, self._den)
-            else:
-                text = "%d/%d" % (self._num, self._den)
-        else:
-            if units == "KM":
-                text = "%.1f" % self.value(units)
-            else:
-                text = "%.0f" % self.value(units)
-        if units == "SM" or units == "MI":
-            text += " miles"
-        elif units == "M":
-            text += " meters"
-        elif units == "KM":
-            text += " km"
-        elif units == "FT":
-            text += " feet"
-        elif units == "IN":
-            text += " inches"
+        text = f"{self._value.to(units):.1f}"
         if self._gtlt == ">":
             text = "greater than " + text
         elif self._gtlt == "<":
@@ -348,8 +212,8 @@ class direction(object):
             self._degrees = direction.compass_dirs[d]
         else:
             self._compass = None
-            value = float(d)
-            if value < 0.0 or value > 360.0:
+            value = float(d) * ureg.deg
+            if value.magnitude < 0.0 or value.magnitude > 360.0:
                 raise ValueError("direction must be 0..360: '" + str(value) + "'")
             self._degrees = value
 
