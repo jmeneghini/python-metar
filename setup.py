@@ -26,6 +26,14 @@ peak wind and sea-level pressure groups.  No other regional conventions
 are formally supported, but a large number of variant formats found
 in international reports are accepted."""
 
+required = ["mypy==1.3.0",
+            "numpy>=1.11.0",
+            "pint>=0.23",
+            "pandas>=2.0",
+            "geopandas>=0.14",
+            "pint-pandas>=0.4",
+            "aiohttp>=3.0"]
+
 setup(
     name="metar",
     version=__version__,
@@ -36,9 +44,10 @@ setup(
     long_description=LONG_DESCRIPTION,
     license="BSD",
     packages=["metar"],
-    package_data={"metar": ["nsd_cccc.txt", "py.typed", "*.pyi"]},
+    package_data={"metar": [".stations.json", "py.typed", "*.pyi"]},
     platforms="Python 2.5 and later.",
     extras_require={"test": ["pytest"]},
+    install_requires=required,
     classifiers=[
         "Development Status :: 5 - Production/Stable",
         "License :: OSI Approved :: BSD License",

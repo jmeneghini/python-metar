@@ -3,38 +3,34 @@
 # SPDX-License-Identifier: BSD-2-Clause
 """Python module to provide station information from the ICAO identifiers."""
 import os
-from metar.Datatypes import position
+from shapely.geometry import Point
+from numpy import nan
+import json
 
 
 class station:
     """An object representing a weather station."""
 
     def __init__(
-        self, id, city=None, state=None, country=None, latitude=None, longitude=None
+        self, id, name = None, state=None, country=None, latitude=nan, longitude=nan
     ):
         self.id = id
-        self.city = city
+        self.name = name
         self.state = state
         self.country = country
-        self.position = position(latitude, longitude)
-        if self.state:
-            self.name = "%s, %s" % (self.city, self.state)
-        else:
-            self.name = self.city
+        self.position = Point(float(longitude), float(latitude))
+
 
 
 current_dir = os.path.dirname(__file__)
-station_file_name = os.path.join(current_dir, "nsd_cccc.txt")
-station_file_url = "http://www.noaa.gov/nsd_cccc.txt"
+station_file_name = os.path.join(current_dir, ".stations.json")
 
 stations = {}
 
-fh = open(station_file_name, "r")
-for line in fh:
-    f = line.strip().split(";")
-    stations[f[0]] = station(f[0], f[3], f[4], f[5], f[7], f[8])
-fh.close()
-
-if __name__ == "__main__":
-    for id in ["KEWR", "KIAD", "KIWI", "EKRK"]:
-        print(id, stations[id].name, stations[id].country)
+# open json file
+with open(station_file_name) as f:
+    data = json.load(f)
+    # set stations with data from json file
+    for set in data:
+        stations[set['icaoId']] = station(set['icaoId'], set['site'], set['state'], set['country'], set['lat'], set['lon'])
+    

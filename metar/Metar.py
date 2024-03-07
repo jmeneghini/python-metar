@@ -6,7 +6,6 @@
 A Metar object represents the weather report encoded by a single METAR code.
 """
 import re
-import datetime
 import warnings
 import logging
 
@@ -17,8 +16,11 @@ from metar.Datatypes import (
     speed,
     distance,
     direction,
-    precipitation,
+    precipitation
 )
+from metar.Units import ureg
+from numpy import nan
+from pandas import Timedelta, Timestamp, NaT, isna
 
 # logger
 _logger = logging.getLogger(__name__)
@@ -321,6 +323,29 @@ REPORT_TYPE = {
     "COR": "manually corrected report",
 }
 
+QUANTITY_ATTRS = [
+    "wind_speed",
+    "wind_gust",
+    "vis",
+    "max_vis",
+    "temp",
+    "dewpt",
+    "press",
+    "wind_speed_peak",
+    "max_temp_6hr",
+    "min_temp_6hr",
+    "max_temp_24hr",
+    "min_temp_24hr",
+    "press_sea_level",
+    "precip_1hr",
+    "precip_3hr",
+    "precip_6hr",
+    "precip_24hr",
+    "snowdepth",
+    "ice_accretion_1hr",
+    "ice_accretion_3hr",
+    "ice_accretion_6hr",
+]
 
 # Helper functions
 def _sanitize(code):
@@ -352,7 +377,7 @@ debug = False
 class Metar(object):
     """METAR (aviation meteorology report)"""
 
-    def __init__(self, metarcode, month=None, year=None, utcdelta=None, strict=True):
+    def __init__(self, metarcode, month=None, year=None, strict=True):
         """
         Parse raw METAR code.
 
@@ -362,8 +387,6 @@ class Metar(object):
         month, year : int, optional
           Date values to be used when parsing a non-current METAR code. If not
           provided, then the month and year are guessed from the current date.
-        utcdelta : int or datetime.timedelta, optional
-          An int of hours or a timedelta object used to specify the timezone.
         strict : bool (default is True)
           This option determines if a ``ParserError`` is raised when
           unparsable groups are found or an unexpected exception is encountered.
@@ -376,55 +399,50 @@ class Metar(object):
         self.correction = None  # COR (corrected - WMO spec)
         self.mod = "AUTO"  # AUTO (automatic) or COR (corrected - US spec)
         self.station_id = None  # 4-character ICAO station code
-        self.time = None  # observation time [datetime]
-        self.cycle = None  # observation cycle (0-23) [int]
-        self.wind_dir = None  # wind direction [direction]
-        self.wind_speed = None  # wind speed [speed]
-        self.wind_gust = None  # wind gust speed [speed]
-        self.wind_dir_from = None  # beginning of range for win dir [direction]
-        self.wind_dir_to = None  # end of range for wind dir [direction]
-        self.vis = None  # visibility [distance]
-        self.vis_dir = None  # visibility direction [direction]
-        self.max_vis = None  # visibility [distance]
-        self.max_vis_dir = None  # visibility direction [direction]
-        self.temp = None  # temperature (C) [temperature]
-        self.dewpt = None  # dew point (C) [temperature]
-        self.press = None  # barometric pressure [pressure]
+        self.time = NaT  # observation time [Timestamp]
+        self.cycle = nan  # observation cycle (0-23) [int]
+        self.wind_dir = nan  # wind direction [direction]
+        self.wind_speed = nan  # wind speed [speed]
+        self.wind_gust = nan  # wind gust speed [speed]
+        self.wind_dir_from = nan  # beginning of range for win dir [direction]
+        self.wind_dir_to = nan  # end of range for wind dir [direction]
+        self.vis = nan  # visibility [distance]
+        self.vis_dir = nan  # visibility direction [direction]
+        self.max_vis = nan  # visibility [distance]
+        self.max_vis_dir = nan  # visibility direction [direction]
+        self.temp = nan  # temperature (C) [temperature]
+        self.dewpt = nan  # dew point (C) [temperature]
+        self.press = nan  # barometric pressure [pressure]
         self.runway = []  # runway visibility (list of tuples)
         self.weather = []  # present weather (list of tuples)
         self.recent = []  # recent weather (list of tuples)
         self.sky = []  # sky conditions (list of tuples)
         self.windshear = []  # runways w/ wind shear (list of strings)
-        self.wind_speed_peak = None  # peak wind speed in last hour
-        self.wind_dir_peak = None  # direction of peak wind speed in last hour
-        self.peak_wind_time = None  # time of peak wind observation [datetime]
-        self.wind_shift_time = None  # time of wind shift [datetime]
-        self.max_temp_6hr = None  # max temp in last 6 hours
-        self.min_temp_6hr = None  # min temp in last 6 hours
-        self.max_temp_24hr = None  # max temp in last 24 hours
-        self.min_temp_24hr = None  # min temp in last 24 hours
-        self.press_sea_level = None  # sea-level pressure
-        self.precip_1hr = None  # precipitation over the last hour
-        self.precip_3hr = None  # precipitation over the last 3 hours
-        self.precip_6hr = None  # precipitation over the last 6 hours
-        self.precip_24hr = None  # precipitation over the last 24 hours
-        self.snowdepth = None  # snow depth (distance)
-        self.ice_accretion_1hr = None  # ice accretion over the past hour
-        self.ice_accretion_3hr = None  # ice accretion over the past 3 hours
-        self.ice_accretion_6hr = None  # ice accretion over the past 6 hours
+        self.wind_speed_peak = nan  # peak wind speed in last hour
+        self.wind_dir_peak = nan  # direction of peak wind speed in last hour
+        self.peak_wind_time = NaT  # time of peak wind observation [Timestamp]
+        self.wind_shift_time = NaT  # time of wind shift [Timestamp]
+        self.max_temp_6hr = nan  # max temp in last 6 hours
+        self.min_temp_6hr = nan  # min temp in last 6 hours
+        self.max_temp_24hr = nan  # max temp in last 24 hours
+        self.min_temp_24hr = nan  # min temp in last 24 hours
+        self.press_sea_level = nan  # sea-level pressure
+        self.precip_1hr = nan  # precipitation over the last hour
+        self.precip_3hr = nan  # precipitation over the last 3 hours
+        self.precip_6hr = nan  # precipitation over the last 6 hours
+        self.precip_24hr = nan  # precipitation over the last 24 hours
+        self.snowdepth = nan  # snow depth (distance)
+        self.ice_accretion_1hr = nan  # ice accretion over the past hour
+        self.ice_accretion_3hr = nan  # ice accretion over the past 3 hours
+        self.ice_accretion_6hr = nan  # ice accretion over the past 6 hours
         self._trend = False  # trend groups present (bool)
         self._trend_groups = []  # trend forecast groups
         self._remarks = []  # remarks (list of strings)
         self._unparsed_groups = []
         self._unparsed_remarks = []
 
-        self._now = datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)
-        if utcdelta:
-            self._utcdelta = utcdelta
-        else:
-            self._utcdelta = datetime.datetime.now() - self._now
-
-        self._month = month
+        self._now = Timestamp.now(tz = "UTC")
+        self._month = month # this is used to specify the month, but doesn't consider timezones? Edge cases? Give in UTC to be safe.
         self._year = year
 
         # Do some string prep before parsing
@@ -489,7 +507,7 @@ class Metar(object):
             if strict:
                 raise ParserError(message)
             else:
-                warnings.warn(message, RuntimeWarning)
+                pass
 
         if self._unparsed_groups:
             code = " ".join(self._unparsed_groups)
@@ -500,7 +518,7 @@ class Metar(object):
             if strict:
                 raise ParserError(message)
             else:
-                warnings.warn(message, RuntimeWarning)
+                pass
 
     @property
     def decode_completed(self):
@@ -574,7 +592,7 @@ class Metar(object):
         Parse the observation-time group.
 
         The following attributes are set:
-            time   [datetime]
+            time   [Timestamp]
             cycle  [int]
             _day   [int]
             _hour  [int]
@@ -596,9 +614,8 @@ class Metar(object):
                 self._year = self._year - 1
         self._hour = int(d["hour"])
         self._min = int(d["min"])
-        self.time = datetime.datetime(
-            self._year, self._month, self._day, self._hour, self._min
-        )
+        self.time = Timestamp(
+            year = self._year, month = self._month, day = self._day, hour = self._hour, minute = self._min, tz = "UTC")
         if self._min < 45:
             self.cycle = self._hour
         else:
@@ -944,14 +961,14 @@ class Metar(object):
             peak_hour = int(d["hour"])
         else:
             peak_hour = self._hour
-        self.peak_wind_time = datetime.datetime(
-            self._year, self._month, self._day, peak_hour, peak_min
+        self.peak_wind_time = Timestamp(
+            year = self._year, month = self._month, day = self._day, hour = peak_hour, minute = peak_min, tz = "UTC"
         )
         if self.peak_wind_time > self.time:
             if peak_hour > self._hour:
-                self.peak_wind_time -= datetime.timedelta(hours=24)
+                self.peak_wind_time -= Timedelta(hours=24)
             else:
-                self.peak_wind_time -= datetime.timedelta(hours=1)
+                self.peak_wind_time -= Timedelta(hours=1)
         self._remarks.append(
             "peak wind %dkt from %d degrees at %d:%02d"
             % (peak_speed, peak_dir, peak_hour, peak_min)
@@ -966,14 +983,14 @@ class Metar(object):
         else:
             wshft_hour = self._hour
         wshft_min = int(d["min"])
-        self.wind_shift_time = datetime.datetime(
-            self._year, self._month, self._day, wshft_hour, wshft_min
+        self.wind_shift_time = Timestamp(
+            year = self._year, month = self._month, day = self._day, hour = wshft_hour, min = wshft_min, tz = "UTC"
         )
         if self.wind_shift_time > self.time:
             if wshft_hour > self._hour:
-                self.wind_shift_time -= datetime.timedelta(hours=24)
+                self.wind_shift_time -= Timedelta(hours=24)
             else:
-                self.wind_shift_time -= datetime.timedelta(hours=1)
+                self.wind_shift_time -= Timedelta(hours=1)
         text = "wind shift at %d:%02d" % (wshft_hour, wshft_min)
         if d["front"]:
             text += " (front)"
@@ -1105,51 +1122,51 @@ class Metar(object):
         lines.append("station: %s" % self.station_id)
         if self.type:
             lines.append("type: %s" % self.report_type())
-        if self.time:
+        if not isna(self.time):
             lines.append("time: %s" % self.time.ctime())
-        if self.temp:
+        if not isna(self.temp):
             lines.append("temperature: %s" % self.temp.string("C"))
-        if self.dewpt:
+        if not isna(self.dewpt):
             lines.append("dew point: %s" % self.dewpt.string("C"))
-        if self.wind_speed:
+        if not isna(self.wind_speed):
             lines.append("wind: %s" % self.wind())
-        if self.wind_speed_peak:
+        if not isna(self.wind_speed_peak):
             lines.append("peak wind: %s" % self.peak_wind())
-        if self.wind_shift_time:
+        if not isna(self.wind_shift_time):
             lines.append("wind shift: %s" % self.wind_shift())
-        if self.vis:
+        if not isna(self.vis):
             lines.append("visibility: %s" % self.visibility())
         if self.runway:
             lines.append("visual range: %s" % self.runway_visual_range())
-        if self.press:
+        if not isna(self.press):
             lines.append("pressure: %s" % self.press.string("mb"))
         if self.weather:
             lines.append("weather: %s" % self.present_weather())
         if self.sky:
             lines.append("sky: %s" % self.sky_conditions("\n     "))
-        if self.press_sea_level:
+        if not isna(self.press_sea_level):
             lines.append("sea-level pressure: %s" % self.press_sea_level.string("mb"))
-        if self.max_temp_6hr:
+        if not isna(self.max_temp_6hr):
             lines.append("6-hour max temp: %s" % str(self.max_temp_6hr))
-        if self.max_temp_6hr:
+        if not isna(self.max_temp_6hr):
             lines.append("6-hour min temp: %s" % str(self.min_temp_6hr))
-        if self.max_temp_24hr:
+        if not isna(self.max_temp_24hr):
             lines.append("24-hour max temp: %s" % str(self.max_temp_24hr))
-        if self.max_temp_24hr:
+        if not isna(self.max_temp_24hr):
             lines.append("24-hour min temp: %s" % str(self.min_temp_24hr))
-        if self.precip_1hr:
+        if not isna(self.precip_1hr):
             lines.append("1-hour precipitation: %s" % str(self.precip_1hr))
-        if self.precip_3hr:
+        if not isna(self.precip_3hr):
             lines.append("3-hour precipitation: %s" % str(self.precip_3hr))
-        if self.precip_6hr:
+        if not isna(self.precip_6hr):
             lines.append("6-hour precipitation: %s" % str(self.precip_6hr))
-        if self.precip_24hr:
+        if not isna(self.precip_24hr):
             lines.append("24-hour precipitation: %s" % str(self.precip_24hr))
-        if self.ice_accretion_1hr:
+        if not isna(self.ice_accretion_1hr):
             lines.append("1-hour Ice Accretion: %s" % str(self.ice_accretion_1hr))
-        if self.ice_accretion_3hr:
+        if not isna(self.ice_accretion_3hr):
             lines.append("3-hour Ice Accretion: %s" % str(self.ice_accretion_3hr))
-        if self.ice_accretion_6hr:
+        if not isna(self.ice_accretion_6hr):
             lines.append("6-hour Ice Accretion: %s" % str(self.ice_accretion_6hr))
         if self._remarks:
             lines.append("remarks:")
@@ -1169,7 +1186,7 @@ class Metar(object):
             text = REPORT_TYPE[self.type]
         else:
             text = self.type + " report"
-        if self.cycle:
+        if not isna(self.cycle):
             text += ", cycle %d" % self.cycle
         if self.mod:
             if self.mod in REPORT_TYPE:
@@ -1186,15 +1203,15 @@ class Metar(object):
 
         Units may be specified as "MPS", "KT", "KMH", or "MPH".
         """
-        if self.wind_speed is None:
+        if isna(self.wind_speed):
             return "missing"
-        elif self.wind_speed.value() == 0.0:
+        elif self.wind_speed.value().magnitude == 0.0:
             text = "calm"
         else:
             wind_speed = self.wind_speed.string(units)
-            if not self.wind_dir:
+            if isna(self.wind_dir):
                 text = "variable at %s" % wind_speed
-            elif self.wind_dir_from:
+            elif not isna(self.wind_dir_from):
                 text = "%s to %s at %s" % (
                     self.wind_dir_from.compass(),
                     self.wind_dir_to.compass(),
@@ -1202,7 +1219,7 @@ class Metar(object):
                 )
             else:
                 text = "%s at %s" % (self.wind_dir.compass(), wind_speed)
-            if self.wind_gust:
+            if not isna(self.wind_gust):
                 text += ", gusting to %s" % self.wind_gust.string(units)
         return text
 
@@ -1212,17 +1229,17 @@ class Metar(object):
 
         Units may be specified as "MPS", "KT", "KMH", or "MPH".
         """
-        if self.wind_speed_peak is None:
+        if isna(self.wind_speed_peak):
             return "missing"
-        elif self.wind_speed_peak.value() == 0.0:
+        elif self.wind_speed_peak.value().magnitude == 0.0:
             text = "calm"
         else:
             wind_speed = self.wind_speed_peak.string(units)
-            if not self.wind_dir_peak:
+            if isna(self.wind_dir_peak):
                 text = wind_speed
             else:
                 text = "%s at %s" % (self.wind_dir_peak.compass(), wind_speed)
-                if self.peak_wind_time is not None:
+                if not isna(self.peak_wind_time):
                     text += " at %s" % self.peak_wind_time.strftime("%H:%M")
         return text
 
@@ -1232,7 +1249,7 @@ class Metar(object):
 
         Units may be specified as "MPS", "KT", "KMH", or "MPH".
         """
-        if self.wind_shift_time is None:
+        if isna(self.wind_shift_time):
             return "missing"
         else:
             return self.wind_shift_time.strftime("%H:%M")
@@ -1243,13 +1260,13 @@ class Metar(object):
 
         Units may be statute miles ("SM") or meters ("M").
         """
-        if self.vis is None:
+        if isna(self.vis):
             return "missing"
-        if self.vis_dir:
+        if not isna(self.vis_dir):
             text = "%s to %s" % (self.vis.string(units), self.vis_dir.compass())
         else:
             text = self.vis.string(units)
-        if self.max_vis:
+        if not isna(self.max_vis):
             if self.max_vis_dir:
                 text += "; %s to %s" % (
                     self.max_vis.string(units),
@@ -1268,8 +1285,8 @@ class Metar(object):
             reportunits = unit if units is None else units
             if low != high:
                 lines.append(
-                    ("on runway %s, from %d to %s")
-                    % (name, low.value(reportunits), high.string(reportunits))
+                    ("on runway %s, from %s to %s")
+                    % (name, low.string(reportunits), high.string(reportunits))
                 )
             else:
                 lines.append("on runway %s, %s" % (name, low.string(reportunits)))

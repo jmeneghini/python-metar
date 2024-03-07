@@ -4,19 +4,14 @@
 """Python classes to represent dimensioned quantities used in weather reports.
 """
 import re
-from math import sin, cos, atan2, sqrt
 import numpy as np
-import pint
+from metar.Units import ureg
 
 # exceptions
-
-ureg = pint.UnitRegistry()
-
 class UnitsError(Exception):
     """Exception raised when unrecognized units are used."""
 
     pass
-
 
 # regexp to match fractions (used by distance class)
 # [Note: numerator of fraction must be single digit.]
@@ -25,26 +20,45 @@ FRACTION_RE = re.compile(r"^((?P<int>\d+)\s*)?(?P<num>\d)/(?P<den>\d+)$")
 
 # classes representing dimensioned values in METAR reports
 
+def _add_units(instance):
+    """Add units to a value, if not already present."""
+    if not isinstance(instance._value, ureg.Quantity):
+        instance._value = ureg.Quantity(instance._value, instance.unit_ureg_dict[instance._units])
+
+def _get_unit_string(instance, unit_str, precision=1):
+    """Return a string representation of the value with the given units."""
+    return f"{instance._value.to(instance.unit_ureg_dict[unit_str]):.{precision}f~P}"
+
 
 class temperature(object):
     """A class representing a temperature value."""
 
     legal_units = ["F", "C", "K"]
+    unit_ureg_dict = {
+        "F": ureg.degF,
+        "C": ureg.degC,
+        "K": ureg.kelvin,
+    }
 
     def __init__(self, value, units="C"):
         if not units.upper() in temperature.legal_units:
             raise UnitsError("unrecognized temperature unit: '" + units + "'")
         self._units = units.upper()
         try:
-            self._value = float(value) * ureg(self._units)
+            self._value = float(value)
         except ValueError:
             if value.startswith("M"):
                 self._value = -float(value[1:])
             else:
                 raise ValueError("temperature must be integer: '" + str(value) + "'")
+        _add_units(self)
 
     def __str__(self):
         return self.string()
+    
+    def value(self):
+        """Return the temperature in its given units."""
+        return self._value
 
     def string(self, units=None):
         """Return a string representation of the temperature, using the given units."""
@@ -54,22 +68,32 @@ class temperature(object):
             if not units.upper() in temperature.legal_units:
                 raise UnitsError("unrecognized temperature unit: '" + units + "'")
             units = units.upper()
-        return f"{self._value.to(units):.1f}"
+        return _get_unit_string(self, units, 1)
 
 
 class pressure(object):
     """A class representing a barometric pressure value."""
 
     legal_units = ["MB", "HPA", "IN"]
+    unit_ureg_dict = {
+        "MB": ureg.mbar,
+        "HPA": ureg.hectopascal,
+        "IN": ureg.inch_of_mercury,
+    }
 
     def __init__(self, value, units="MB"):
         if not units.upper() in pressure.legal_units:
             raise UnitsError("unrecognized pressure unit: '" + units + "'")
-        self._value = float(value) * ureg(units)
+        self._value = float(value)
         self._units = units.upper()
+        _add_units(self)
 
     def __str__(self):
         return self.string()
+    
+    def value(self):
+        """Return the pressure in its given units."""
+        return self._value.to(ureg.mbar)
 
     def string(self, units=None):
         """Return a string representation of the pressure, using the given units."""
@@ -79,13 +103,19 @@ class pressure(object):
             if units.upper() not in pressure.legal_units:
                 raise UnitsError("unrecognized pressure unit: '" + units + "'")
             units = units.upper()
-        return f"{self._value.to(units):.1f}"
+        return _get_unit_string(self, units, 2)
 
 
 class speed(object):
     """A class representing a wind speed value."""
 
     legal_units = ["KT", "MPS", "KMH", "MPH"]
+    unit_ureg_dict = {
+        "KT": ureg.knot,
+        "MPS": ureg.meter / ureg.second,
+        "KMH": ureg.kilometer / ureg.hour,
+        "MPH": ureg.mile / ureg.hour,
+    }
     legal_gtlt = [">", "<"]
 
     def __init__(self, value, units=None, gtlt=None):
@@ -100,10 +130,15 @@ class speed(object):
                 "unrecognized greater-than/less-than symbol: '" + gtlt + "'"
             )
         self._gtlt = gtlt
-        self._value = float(value) * ureg(self._units)
+        self._value = float(value)
+        _add_units(self)
 
     def __str__(self):
         return self.string()
+    
+    def value(self):
+        """Return the speed in its given units."""
+        return self._value
 
     def string(self, units=None):
         """Return a string representation of the speed in the given units."""
@@ -113,7 +148,7 @@ class speed(object):
             if units.upper() not in speed.legal_units:
                 raise UnitsError("unrecognized speed unit: '" + units + "'")
             units = units.upper()
-        text = f"{self._value.to(units):.1f}"
+        text = _get_unit_string(self, units, 0)
         if self._gtlt == ">":
             text = "greater than " + text
         elif self._gtlt == "<":
@@ -125,6 +160,14 @@ class distance(object):
     """A class representing a distance value."""
 
     legal_units = ["SM", "MI", "M", "KM", "FT", "IN"]
+    unit_ureg_dict = {
+        "SM": ureg.mile,
+        "MI": ureg.mile,
+        "M": ureg.meter,
+        "KM": ureg.kilometer,
+        "FT": ureg.foot,
+        "IN": ureg.inch,
+    }
     legal_gtlt = [">", "<"]
 
     def __init__(self, value, units=None, gtlt=None):
@@ -150,7 +193,7 @@ class distance(object):
             )
         self._gtlt = gtlt
         try:
-            self._value = float(value) * ureg(self._units)
+            self._value = float(value)
             self._num = None
             self._den = None
         except ValueError:
@@ -163,10 +206,15 @@ class distance(object):
             self._value = float(self._num) / float(self._den)
             if df["int"]:
                 self._value += float(df["int"])
-            self._value = self._value * ureg(self._units)
+            self._value = self._value
+        _add_units(self)
 
     def __str__(self):
         return self.string()
+    
+    def value(self):
+        """Return the distance in its given units."""
+        return self._value
 
     def string(self, units=None):
         """Return a string representation of the distance in the given units."""
@@ -176,7 +224,7 @@ class distance(object):
             if not units.upper() in distance.legal_units:
                 raise UnitsError("unrecognized distance unit: '" + units + "'")
             units = units.upper()
-        text = f"{self._value.to(units):.1f}"
+        text = _get_unit_string(self, units, 1)
         if self._gtlt == ">":
             text = "greater than " + text
         elif self._gtlt == "<":
@@ -212,10 +260,12 @@ class direction(object):
             self._degrees = direction.compass_dirs[d]
         else:
             self._compass = None
-            value = float(d) * ureg.deg
-            if value.magnitude < 0.0 or value.magnitude > 360.0:
+            value = float(d)
+            if value < 0.0 or value > 360.0:
                 raise ValueError("direction must be 0..360: '" + str(value) + "'")
             self._degrees = value
+        self._degrees = self._degrees * ureg.degrees
+        
 
     def __str__(self):
         return self.string()
@@ -226,12 +276,12 @@ class direction(object):
 
     def string(self):
         """Return a string representation of the numerical direction."""
-        return "%.0f degrees" % self._degrees
+        return f"{self._degrees:.1f~P}"
 
     def compass(self):
         """Return the compass direction, e.g., "N", "ESE", etc.)."""
         if not self._compass:
-            degrees = 22.5 * round(self._degrees / 22.5)
+            degrees = 22.5 * round(self._degrees.magnitude / 22.5)
             if degrees == 360.0:
                 self._compass = "N"
             else:
@@ -246,6 +296,10 @@ class precipitation(object):
     """A class representing a precipitation value."""
 
     legal_units = ["IN", "CM"]
+    unit_ureg_dict = {
+        "IN": ureg.inch,
+        "CM": ureg.centimeter,
+    }
     legal_gtlt = [">", "<"]
 
     def __init__(self, value, units=None, gtlt=None):
@@ -273,28 +327,15 @@ class precipitation(object):
         self._value = float(value)
         # In METAR world, a string of just four or three zeros denotes trace
         self._istrace = value in ["0000", "000"]
+        _add_units(self)
 
     def __str__(self):
         return self.string()
 
-    def value(self, units=None):
-        """Return the precipitation in the specified units."""
-        if not units:
-            return self._value
-        else:
-            if not units.upper() in precipitation.legal_units:
-                raise UnitsError("unrecognized precipitation unit: '" + units + "'")
-            units = units.upper()
-        if units == self._units:
-            return self._value
-        if self._units == "CM":
-            i_value = self._value * 2.54
-        else:
-            i_value = self._value
-        if units == "CM":
-            return i_value * 2.54
-        else:
-            return i_value
+    def value(self):
+        """Return the precipitation in its given units."""
+        return self._value
+        
 
     def string(self, units=None):
         """Return a string representation of the precipitation in the given units."""
@@ -307,11 +348,7 @@ class precipitation(object):
         # A trace is a trace in any units
         if self._istrace:
             return "Trace"
-        text = "%.2f" % self.value(units)
-        if units == "CM":
-            text += "cm"
-        else:
-            text += "in"
+        text = _get_unit_string(self, units, 2)
         if self._gtlt == ">":
             text = "greater than " + text
         elif self._gtlt == "<":
@@ -332,6 +369,10 @@ class position(object):
 
     def __str__(self):
         return self.string()
+    
+    def string(self):
+        """Return a string representation of the location."""
+        return (self.latitude + ", " + self.longitude)
 
     def getdirection(self, position2):
         """
@@ -343,9 +384,20 @@ class position(object):
         long1 = self.longitude
         lat2 = position2.latitude
         long2 = position2.longitude
-        s = -sin(long1 - long2) * cos(lat2)
-        c = cos(lat1) * sin(lat2) - sin(lat1) * cos(lat2) * cos(long1 - long2)
-        d = atan2(s, c) * 180.0 / math.pi
+        s = -np.sin(long1 - long2) * np.cos(lat2)
+        c = np.cos(lat1) * np.sin(lat2) - np.sin(lat1) * np.cos(lat2) * np.cos(long1 - long2)
+        d = np.arctan2(s, c) * 180.0 / np.pi    
         if d < 0.0:
             d += 360.0
         return direction(d)
+
+# define a list of the different types
+metar_types = [
+    temperature,
+    pressure,
+    speed,
+    distance,
+    direction,
+    precipitation,
+    position,
+]

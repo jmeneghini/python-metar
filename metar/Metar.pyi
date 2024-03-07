@@ -1,4 +1,3 @@
-from datetime import datetime, timedelta
 from re import Match
 from typing import Callable, List, Literal, Optional, Tuple, Union
 
@@ -10,6 +9,10 @@ from metar.Datatypes import (
     speed,
     temperature,
 )
+
+from metar.Units import ureg
+from numpy import nan
+from pandas import Timedelta, Timestamp, NaT
 
 def xlate_loc(loc: str) -> str: ...
 def _sanitize(code: str) -> str: ...
@@ -24,7 +27,7 @@ class Metar:
     correction: Optional[str]
     mod: Literal["AUTO", "COR"]
     station_id: Optional[str]
-    time: Optional[datetime]
+    time: Optional[Timestamp]
     cycle: Optional[int]
     wind_dir: Optional[direction]
     wind_speed: Optional[speed]
@@ -45,8 +48,8 @@ class Metar:
     windshear: List[str]
     wind_speed_peak: Optional[speed]
     wind_dir_peak: Optional[direction]
-    peak_wind_time: Optional[datetime]
-    wind_shift_time: Optional[datetime]
+    peak_wind_time: Optional[Timestamp]
+    wind_shift_time: Optional[Timestamp]
     max_temp_6hr: Optional[temperature]
     min_temp_6hr: Optional[temperature]
     max_temp_24hr: Optional[temperature]
@@ -65,7 +68,7 @@ class Metar:
     _remarks: List[str]
     _unparsed_groups: List[str]
     _unparsed_remarks: List[str]
-    _now: datetime
+    _now: Timestamp
     month: int
     year: int
 
@@ -74,7 +77,6 @@ class Metar:
         metarcode: str,
         month: Optional[int] = ...,
         year: Optional[int] = ...,
-        utcdelta: Union[int, timedelta, None] = ...,
         strict: bool = ...,
     ): ...
     @property
